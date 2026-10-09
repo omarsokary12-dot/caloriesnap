@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CalorieSnap</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --surface: #fffdf8;
+      --ink: #1c1915;
+      --muted: #6f675c;
+      --line: #e4d9c8;
+      --primary: #1f6b45;
+      --primary-fg: #f4faf6;
+      --user: #1c1915;
+      --user-fg: #faf7f2;
+      --danger: #9a3412;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.5 "Segoe UI", sans-serif;
+    }
+    main { max-width: 40rem; margin: 0 auto; padding: 1rem; }
+    header, .card, .composer { background: var(--surface); border: 1px solid var(--line); border-radius: 1.25rem; }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; margin-bottom: 0.75rem; }
+    h1 { font-size: 1.5rem; margin: 0; }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .row { display: flex; gap: 0.5rem; }
+    .icon, .send, .week {
+      height: 2.75rem; border-radius: 0.9rem; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+    }
+    .icon { width: 2.75rem; }
+    .week { padding: 0 0.8rem; }
+    .card { padding: 1rem; margin-bottom: 0.75rem; }
+    .big { font-size: 1.8rem; margin: 0; }
+    form.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.75rem; }
+    label { color: var(--muted); font-size: 0.9rem; }
+    input, textarea {
+      width: 100%; margin-top: 0.25rem; border: 1px solid var(--line); background: var(--bg);
+      color: var(--ink); border-radius: 0.75rem; padding: 0.55rem 0.7rem;
+    }
+    .choice { display: flex; gap: 0.4rem; margin-top: 0.25rem; }
+    .choice button, .go { height: 2.75rem; border-radius: 0.75rem; border: 1px solid var(--line); background: var(--bg); }
+    .choice button.on, .send { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); }
+    .go { grid-column: 1 / -1; background: var(--user); color: var(--user-fg); }
+    .chat { min-height: 12rem; }
+    .bubble { max-width: 85%; padding: 0.7rem 0.9rem; border-radius: 1.1rem; margin: 0.5rem 0; white-space: pre-wrap; }
+    .bot { background: var(--surface); border: 1px solid var(--line); }
+    .me { margin-left: auto; background: var(--user); color: var(--user-fg); }
+    .me img, .preview img { max-height: 9rem; border-radius: 0.8rem; display: block; }
+    .composer { display: flex; gap: 0.5rem; align-items: end; padding: 0.7rem; position: sticky; bottom: 0.5rem; }
+    textarea { resize: none; margin: 0; min-height: 2.75rem; }
+    .send { width: 2.75rem; }
+    .danger { color: var(--danger); }
+    ul { list-style: none; padding: 0; margin: 0.5rem 0 0; }
+    li { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>CalorieSnap</h1>
+        <div class="muted">One-file meal log</div>
+      </div>
+      <div class="row">
+        <button class="week" id="weekBtn" type="button">Week</button>
+        <button class="icon" id="clearBtn" type="button" aria-label="Clear chat">×</button>
+      </div>
+    </header>
+
+    <section class="card" id="weekCard" hidden>
+      <h2>Week</h2>
+      <p class="muted" id="weekSummary"></p>
+      <ul id="weekList"></ul>
+    </section>
+
+    <section class="card">
+      <p class="muted">Today</p>
+      <p class="big"><span id="today">0</span> <span class="muted">/ <span id="goal">2000</span> kcal</span></p>
+      <p class="muted" id="protein"></p>
+      <form class="grid" id="planForm">
+        <label>Age<input id="age" inputmode="numeric" /></label>
+        <label>Weight (kg)<input id="weight" inputmode="decimal" /></label>
+        <label>Height (cm)<input id="height" inputmode="decimal" /></label>
+        <label>Goal weight (kg)<input id="goalWeight" inputmode="decimal" /></label>
+        <div>
+          <span class="muted">Gender</span>
+          <div class="choice">
+            <button type="button" id="male" class="on">Male</button>
+            <button type="button" id="female">Female</button>
+          </div>
+        </div>
+        <button class="go" type="submit">Make my 3-month plan</button>
+      </form>
+      <p id="planNote"></p>
+      <ul id="meals"></ul>
+    </section>
+
+    <section class="chat" id="chat"></section>
+
+    <form class="composer" id="sendForm">
+      <input id="file" type="file" accept="image/*" hidden />
+      <button class="icon" type="button" id="cam" aria-label="Upload meal photo">📷</button>
+      <div>
+        <img id="thumb" alt="" hidden style="height:4.5rem;border-radius:0.7rem" />
+        <textarea id="text" rows="1" placeholder="Describe the meal"></textarea>
+      </div>
+      <button class="send" type="submit" aria-label="Send">→</button>
+    </form>
+    <p class="muted" id="error"></p>
+  </main>
+  <script>
+    const FOODS = [
+      ["bagel", "plain bagel", 280, 11], ["egg", "egg", 78, 6], ["toast", "slice of bread", 80, 3],
+      ["bread", "slice of bread", 80, 3], ["avocado", "avocado half", 120, 1], ["banana", "banana", 105, 1],
+      ["apple", "apple", 95, 0], ["rice", "cup of rice", 205, 4], ["chicken", "chicken breast", 280, 52],
+      ["salmon", "salmon fillet", 360, 34], ["beef", "beef portion", 420, 42], ["burger", "burger", 540, 28],
+      ["fries", "fries", 365, 4], ["pizza", "pizza slice", 285, 12], ["pasta", "plate of pasta", 420, 14],
+      ["salad", "salad", 150, 4], ["yogurt", "yogurt", 150, 12], ["oat", "oatmeal", 250, 8],
+      ["coffee", "coffee", 40, 2], ["cheese", "cheese", 110, 7], ["potato", "potato", 160, 4],
+      ["taco", "taco", 210, 10], ["burrito", "burrito", 650, 28], ["sandwich", "sandwich", 420, 22]
+    ];
+    const $ = (id) => document.getElementById(id);
+    let sex = "m";
+    let photo = null;
+    let goal = 2000;
+
+    function dayKey(d) {
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    }
+    function load() {
+      try { return JSON.parse(localStorage.getItem("caloriesnap-one") || "{}"); }
+      catch { return {}; }
+    }
+    function save(data) { localStorage.setItem("caloriesnap-one", JSON.stringify(data)); }
+    let state = load();
+    state.items = state.day === dayKey(new Date()) && Array.isArray(state.items) ? state.items : [];
+    state.history = state.history || {};
+    state.profile = state.profile || {};
+    goal = state.goal || 2000;
+
+    function paint() {
+      const sum = state.items.reduce((n, i) => n + i.kcal, 0);
+      $("today").textContent = sum;
+      $("goal").textContent = goal;
+      $("protein").textContent = state.protein ? "Protein target " + state.protein + " g" : "";
+      $("planNote").textContent = state.note || "";
+      $("meals").innerHTML = state.items.slice(-3).map((i) => "<li><span>" + i.label + "</span><span>" + i.kcal + "</span></li>").join("");
+      ["age", "weight", "height", "goalWeight"].forEach((k) => { if (state.profile[k]) $(k).value = state.profile[k]; });
+      sex = state.profile.sex === "f" ? "f" : "m";
+      $("male").className = sex === "m" ? "on" : "";
+      $("female").className = sex === "f" ? "on" : "";
+      state.history[dayKey(new Date())] = sum;
+      state.goal = goal;
+      state.day = dayKey(new Date());
+      save(state);
+    }
+
+    function estimate(text) {
+      const lower = text.toLowerCase();
+      const hits = [];
+      FOODS.forEach((f) => {
+        if (lower.includes(f[0])) {
+          const m = lower.match(new RegExp("(\\d+)\\s+" + f[0]));
+          const count = m ? Math.min(6, Number(m[1])) : /\b(two|2)\s+/.test(lower) && lower.includes("2 " + f[0]) ? 2 : 1;
+          for (let i = 0; i < (m ? count : 1); i++) hits.push(f);
+        }
+      });
+      if (!hits.length) return null;
+      const kcal = hits.reduce((n, f) => n + f[2], 0);
+      const p = hits.reduce((n, f) => n + f[3], 0);
+      return { kcal, text: "From your description: " + hits.map((f) => f[1]).join(", ") + ".\nEstimated calories: " + kcal + " kcal (about " + Math.round(kcal * 0.85) + "–" + Math.round(kcal * 1.2) + ").\nProtein about " + p + " g.\nTypical portions only. Not medical advice." };
+    }
+
+    function addBubble(text, mine, img) {
+      const el = document.createElement("div");
+      el.className = "bubble " + (mine ? "me" : "bot");
+      if (img) { const i = document.createElement("img"); i.src = img; i.alt = "Meal"; el.appendChild(i); }
+      el.appendChild(document.createTextNode(text));
+      $("chat").appendChild(el);
+    }
+
+    $("male").onclick = () => { sex = "m"; paint(); };
+    $("female").onclick = () => { sex = "f"; state.profile.sex = "f"; paint(); };
+    $("planForm").onsubmit = (e) => {
+      e.preventDefault();
+      const age = Number($("age").value), kg = Number($("weight").value), cm = Number($("height").value), goalKg = Number($("goalWeight").value);
+      if (age < 10 || age > 100 || kg < 30 || kg > 300 || cm < 100 || cm > 250 || !goalKg || goalKg >= kg) {
+        $("error").textContent = "Enter age, height, current weight, and a lower goal weight.";
+        return;
+      }
+      const bmr = 10 * kg + 6.25 * cm - 5 * age + (sex === "m" ? 5 : -161);
+      const lose = kg - goalKg;
+      const wanted = (lose * 7700) / 90;
+      const deficit = Math.min(wanted, 750);
+      const kcal = Math.max(sex === "m" ? 1500 : 1200, Math.round(bmr * 1.4 - deficit));
+      const protein = Math.round(kg * 1.6);
+      goal = kcal;
+      state.protein = protein;
+      state.profile = { age: $("age").value, weight: $("weight").value, height: $("height").value, goalWeight: $("goalWeight").value, sex };
+      state.note = wanted > 750
+        ? lose.toFixed(1) + " kg in 3 months is fast. Eat " + kcal + " kcal a day. You may need longer than 3 months."
+        : "Lose " + lose.toFixed(1) + " kg in 3 months, about " + (lose / 13).toFixed(1) + " kg a week. Eat " + kcal + " kcal and " + protein + " g protein a day.";
+      $("error").textContent = "";
+      paint();
+    };
+
+    $("weekBtn").onclick = () => {
+      const card = $("weekCard");
+      card.hidden = !card.hidden;
+      const rows = [];
+      const now = new Date();
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now); d.setDate(now.getDate() - i);
+        const key = dayKey(d);
+        const kcal = key === dayKey(now) ? state.items.reduce((n, it) => n + it.kcal, 0) : (state.history[key] || 0);
+        rows.push({ label: d.toLocaleDateString(undefined, { weekday: "short" }), kcal });
+      }
+      const logged = rows.filter((r) => r.kcal > 0);
+      const avg = logged.length ? Math.round(logged.reduce((n, r) => n + r.kcal, 0) / logged.length) : 0;
+      $("weekSummary").textContent = logged.length ? "Average " + avg + " kcal on days you logged. Goal is " + goal + "." : "No meals logged in the last 7 days.";
+      $("weekList").innerHTML = rows.map((r) => "<li><span>" + r.label + "</span><span>" + (r.kcal ? r.kcal + " kcal" : "—") + "</span></li>").join("");
+    };
+
+    $("cam").onclick = () => $("file").click();
+    $("file").onchange = () => {
+      const file = $("file").files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => { photo = reader.result; $("thumb").src = photo; $("thumb").hidden = false; };
+      reader.readAsDataURL(file);
+    };
+
+    $("sendForm").onsubmit = (e) => {
+      e.preventDefault();
+      const text = $("text").value.trim();
+      if (!text && !photo) return;
+      addBubble(text || "Meal photo", true, photo);
+      let reply;
+      if (photo && !text) reply = "This file cannot read a photo by itself. Type what is on the plate, for example chicken and rice.";
+      else {
+        const est = estimate(text);
+        reply = est ? est.text : "Name the foods, like 2 eggs and toast.";
+        if (est) {
+          state.items.push({ label: text, kcal: est.kcal });
+          paint();
+        }
+      }
+      addBubble(reply, false);
+      $("text").value = "";
+      photo = null;
+      $("thumb").hidden = true;
+      $("file").value = "";
+    };
+    $("clearBtn").onclick = () => { $("chat").innerHTML = ""; };
+    addBubble("Type what you ate. Set your age, weight, height, and goal weight for a 3-month plan. Saved on this phone.", false);
+    paint();
+  </script>
+</body>
+</html>
